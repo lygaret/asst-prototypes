@@ -1,0 +1,159 @@
+* assistant demo
+
+- bad memory
+  - the assistant can call `remember_fact` and `recall_fact`, and associate facts with subjects
+  - the facts can then be recalled via vector search in chroma
+
+- dumb ui
+  - run `bundle exec ruby ./app.rb` to have a conversation
+
+* demo
+
+#+begin_example
+
+jonathan@maxwell asst% bundle exec ruby ./app.rb
+> mirah likes sci-fi, puzzles and mystery games
+
+waiting...
+waiting...
+waiting...
+making asynchronous tool call...
+        call_CMN7uRqSwC3cXFlugyysYx67 remember_fact {"subject"=>"Mirah", "fact"=>"likes sci-fi, puzzles, and mystery games"}
+remember complete...
+submitting tool response
+waiting...
+complete
+
+🤖 Got it! Mirah's interests are saved. Anything else you'd like me to remember or do?
+
+> sarah like pumpkins, mysteries and fuzzy creatures
+
+waiting...
+making asynchronous tool call...
+        call_dQTPaluPGFxPI8LTTdYz2k7j remember_fact {"subject"=>"Sarah", "fact"=>"likes pumpkins, mysteries, and fuzzy creatures"}
+remember complete...
+submitting tool response
+waiting...
+waiting...
+complete
+
+🤖 Noted! Sarah's likes are saved. Anything else you want to share or need help with?
+
+#+end_example
+
+then, in a new session, without sharing completion context:
+
+#+begin_example
+
+jonathan@maxwell openai-demos % bundle exec ruby ./app.rb
+
+> any suggestions on something to do with both mirah and sarah?
+
+waiting...
+making asynchronous tool call...
+        call_lgQlj0p9644sJdKN7b1hzjCe recall_fact {"subject"=>"Mirah", "query"=>"everything"}
+recall complete...
+        [{"fact"=>"likes sci-fi, puzzles, and mystery games", "subject"=>"mirah"}]
+submitting tool response
+waiting...
+making asynchronous tool call...
+        call_jFjTjfc8BxIeODdcrJXmDkUI recall_fact {"subject"=>"Sarah", "query"=>"everything"}
+recall complete...
+        [{"key"=>"date idea", "subject"=>"sarah", "value"=>"silent disco"}, {"fact"=>"likes pumpkins, mysteries, and fuzzy creatures", "subject"=>"sarah"}, {"key"=>"hobby", "subject"=>"sarah", "value"=>"pottery"}, {"fact"=>"likes Vino Verde and sake", "subject"=>"sarah"}, {"key"=>"favorite foods", "subject"=>"sarah", "value"=>"sushi, Indian, Thai"}, {"key"=>"interests", "subject"=>"sarah", "value"=>"art exhibits, shows"}]
+submitting tool response
+waiting...
+complete
+
+🤖 Mirah enjoys sci-fi, puzzles, and mystery games, while Sarah is into mysteries, pumpkins, and fuzzy creatures, with an added interest in art exhibits and shows. How about planning a themed escape room experience? It combines puzzles and mystery, which both of them love. After that, you could hit up an art exhibit or grab some sushi or Thai food. Sounds like a fun day, right?
+
+#+end_example
+
+* openai stuff
+
+- assistant
+  - has system prompt
+  - has many tools
+- thread
+  - independent of assistant
+  - aggregate of messages
+- message
+  - role: assistant/user
+    - assistant role can be used to seed the conversation;
+    - ie, with the current date/time
+- run - thread passed to assistant to generate next steps
+  - step - detail of what happens
+
+** assistant:
+
+#+begin_src json
+  {
+    "id": "asst_OhUrhiPX0WAqxbB76Jx7bGqo",
+    "object": "assistant",
+    "created_at": 1725902706,
+    "name": "Personal Assistant",
+    "description": null,
+    "model": "gpt-4o",
+    "instructions": "You are a personal assistant, charged with helping me maintain my contacts, calendar, notes and thoughts.\n\nDo your best to remember everything you're told, including inferring relationships between people in chat. \n\nUse the tools available to use for remembering facts. You have a fact database accessible via tool calls.\n\nAnswer in a chill, conversational tone. You should be likeable and concise.",
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "remember_fact",
+          "description": "Remember some fact about a subject. The key will be turned into an embedding for future retrieval through `retrieve_fact`, assuming the subject remains the same.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "subject": {
+                "type": "string",
+                "description": "the subject of the fact; eg. 'Jon', 'Mom', 'Ezra', 'C++', etc."
+              },
+              "fact": {
+                "type": "string",
+                "description": "the fact to remember; eg. 'favorite food is greek', 'works as a software engineer', etc."
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "subject",
+              "fact"
+            ]
+          },
+          "strict": true
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "recall_fact",
+          "description": "Recall some fact about a subject. The query is vector matched, so doesn't need to be exact. If the query is missing, all facts about the subject will be returned. Multiple facts can be returned.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "subject": {
+                "type": "string",
+                "description": "the subject of the fact; eg. 'Jon', 'Mom', 'Ezra'"
+              },
+              "query": {
+                "type": "string",
+                "description": "the query to run against the fact store; if missing, null, or 'everything', all facts will be returned."
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "subject",
+              "query"
+            ]
+          },
+          "strict": true
+        }
+      }
+    ],
+    "top_p": 1.0,
+    "temperature": 1.0,
+    "tool_resources": {},
+    "metadata": {},
+    "response_format": {
+      "type": "text"
+    }
+  }
+#+end_src
